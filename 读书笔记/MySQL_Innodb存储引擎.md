@@ -58,3 +58,84 @@
 
 ### 二、InnoDB存储引擎
 
+#### 1. InnoDB体系架构
+
+![img](..\resource\innodb体系架构.jpg)
+
+InnoDB体系结构包括：内存池、后台线程以及存储文件
+
+**内存池：**由多个内存块组成的，主要包括缓存磁盘数据、redo log缓冲等
+
+**后台线程：**负责刷新内存池中的数据，Master Thread、IO Thread以及Purge Thread等；
+
+**存储文件：**一般包括表结构文件（.frm）、共享表空间文件（ibdata1）、独占表空间文件（ibd）以及日志文件（redo文件等）等
+
+
+
+#### 2.内存
+
+##### 2.1 缓冲池
+
+InnoDB 基于磁盘，按页管理。需要使用缓冲技术提高性能。
+
+引入缓冲后InnoDB数据流程：
+
+> - 查询：判断是否存在缓冲池中？命中，读取缓冲池：读磁盘
+> - 修改：先修改在缓冲池中的页，然后按一定的频率**（checkpoint机制）**刷新至磁盘
+
+**参数：**
+
+>  innodb_buffer_pool_size 缓冲池大小
+>
+> innodb_buffer_pool_instances 缓冲池实例个数，默认 1  (允许有多个缓冲池实例，页通过哈希值平均分配)
+>
+> innodb_old_blocks_pct   midpoint位置，默认37(百分比)    new  midpoint  old  
+>
+> innodb_old_blocks_time  多长时间后，新增页才能放入热端
+
+**命令/表：**
+
+> show engine innodb status : 查看InnoDB引擎的所有详细信息
+>
+> information_schema.innodb_buffer_pool_stats 缓冲状态表
+
+**构成：**索引页、数据页、undo页、插入缓冲、自适应哈希索引、InnoDB的锁信息、数据字典等
+
+###### 2.1.1 数据页：LRU LIST、FREE LIST、FLUSH LIST
+
+**LRU算法**(Latest Recent Used)：使用频繁在前，使用最少在尾
+
+> ​	算法优化：新增页放置在midpoint位置；加入热端时间限制(innodb_old_blocks_time)
+>
+> ​	为什么优化：某些SQL操作可能会是缓冲池中的数据刷出，影响缓冲池效率。eg：索引或数据的扫描
+>
+> LRU过程：
+>
+> - 数据库启动，LRU空，页都存放在free list 
+> - 需要从缓冲池中分配页时，free中有空页？free-1 lru+1：lru淘汰机制
+>
+> 过程中 old-->new  称为 page made young ，因为innodb_old_blocks_time限制没有从old-->new 称为 page not made young
+
+
+
+
+
+
+
+
+
+#### 3.后台线程
+
+**作用**：
+
+> - 刷新内存池中的数据，保证缓存数据是最近常用的
+> - 将已修改的数据文件刷新至磁盘文件
+> - 保证数据库发生异常情况下InnoDB能恢复正常
+
+**分类：**
+
+> - Master Thread : 缓冲池异步刷新至磁盘，保证数据一致性，脏页刷新、合并插入缓冲、undo回收
+> - IO Thread ：负责IO的回调处理
+> - Purge Thread ：事务提交后，回收undo页
+> - Page Cleaner Thread ：脏页刷新
+
